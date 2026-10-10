@@ -11,3 +11,9 @@
 ## Run the FastAPI app using uvicorn
 - uvicorn app.main:app --reload
 - application swagger url: http://127.0.0.1:8000/docs
+
+## Run DB server
+- Make sure docker desktop is up and running
+- Run ```docker compose up -d```
+- Verify the container ```docker compose ps```
+
