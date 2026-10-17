@@ -17,3 +17,31 @@
 - Run ```docker compose up -d```
 - Verify the container ```docker compose ps```
 
+## Test DB connection from the app
+- In python console
+```
+  from app.db.session import engine;
+  conn = engine.connect();
+  print('Database connection successful:', conn.closed == 0);
+  conn.close()
+```
+
+## DB details for clients to connect
+- url: jdbc:postgresql://localhost:5432/market_db
+- username: postgres
+- password: postgres
+
+## Test fetcher service
+```
+  python -c "import asyncio; from app.services.fetcher import DataFetcherService; service = DataFetcherService(); print(asyncio.run(service.fetch_rss_or_api('AAPL')))"
+```
+
+## Test local ollama call with embedding service
+```
+  python -c "import asyncio; from app.services.embedder import EmbeddingService; svc = EmbeddingService(); print(asyncio.run(svc.get_embedding('Testing GPU embedding generation'))[:5])"
+```
+
+## Test ingestion service
+```
+  python -c "import asyncio; from app.db.session import SessionLocal; from app.services.ingestion import IngestionPipeline; db = SessionLocal(); pipeline = IngestionPipeline(db); print('New articles ingested:', asyncio.run(pipeline.ingest_ticker_news('AAPL'))); db.close()"
+```
