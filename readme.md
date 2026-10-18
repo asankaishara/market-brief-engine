@@ -45,3 +45,21 @@
 ```
   python -c "import asyncio; from app.db.session import SessionLocal; from app.services.ingestion import IngestionPipeline; db = SessionLocal(); pipeline = IngestionPipeline(db); print('New articles ingested:', asyncio.run(pipeline.ingest_ticker_news('AAPL'))); db.close()"
 ```
+
+## Test vector search from the swagger UI
+- Payload to try
+```
+  {
+  "query": "earnings growth and cloud adoption",
+  "ticker": "MU",
+  "top_k": 2
+  }
+```
+
+## It is important to understand vector operations
+- <=>	Cosine Distance
+- <->	Euclidean / L2 Distance
+- <#>	Negative Inner Product
+- <+>	L1 / Taxicab Distance
+- <~>	Hamming Distance
+- <%>	Jaccard Distance
