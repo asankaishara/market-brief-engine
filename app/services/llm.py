@@ -4,10 +4,7 @@ from typing import List, Dict, Any
 from app.core.config import settings
 
 class LLMService:
-    """Service to interact with foundational models via AWS Bedrock."""
-
     def __init__(self):
-        # Initialize the Bedrock Runtime client using settings from config.py
         self.client = boto3.client(
             service_name="bedrock-runtime",
             region_name=settings.AWS_REGION,
@@ -16,51 +13,47 @@ class LLMService:
         )
         self.model_id = settings.BEDROCK_MODEL_ID
 
-    def generate_market_brief(self, query: str, context_chunks: List[Dict[str, Any]]) -> str:
-        """
-        Synthesizes a market brief by passing the user query and retrieved context chunks
-        to the AWS Bedrock LLM.
-        """
-        # 1. Format context chunks into a clean reference string
+    def generate_market_brief(self, ticker: str, context_chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Synthesizes structured market brief JSON from retrieved context chunks."""
         context_text = "\n\n".join([
-            f"Source: {chunk['source']} | Ticker: {chunk['ticker']} | Date: {chunk['published_at']}\nContent: {chunk['chunk_text']}"
+            f"Title: {chunk.get('article_title', '')} | Source: {chunk.get('source', '')} | URL: {chunk.get('url', '')}\nDate: {chunk.get('published_at', '')}\nText: {chunk.get('chunk_text', '')}"
             for chunk in context_chunks
         ])
 
-        # 2. Construct prompt engineering instructions for RAG
-        prompt = f"""You are an expert Financial Analyst AI assistant. Use the provided context extracts from recent financial news to answer the user's query accurately and concisely. 
-If the answer cannot be found in the context, state clearly that there is insufficient data in the ingested news.
+        system_prompt = (
+            "You are a financial analysis engine. Return ONLY a valid JSON object matching this schema:\n"
+            "{\n"
+            '  "bias": "bullish" | "bearish" | "neutral" | "no_view",\n'
+            '  "confidence": "low" | "medium" | "high",\n'
+            '  "drivers": ["short driver citing a source title"],\n'
+            '  "risks": ["short risk factor"]\n'
+            "}\n"
+            "Ground your analysis strictly in the provided articles. Do not give trading advice, order types, or target prices. "
+            "Return raw JSON only, no markdown formatting, no backticks."
+        )
 
-Context Articles:
-{context_text}
-
-User Query: {query}
-
-Financial Market Briefing:"""
-
-        # 3. Format payload for Anthropic Claude models on Bedrock
-        native_request = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 1000,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            "temperature": 0.2
-        }
+        user_content = f"Articles for {ticker.upper()}:\n{context_text}\n\nGenerate market brief JSON:"
 
         try:
-            # 4. Invoke AWS Bedrock
-            response = self.client.invoke_model(
+            response = self.client.converse(
                 modelId=self.model_id,
-                body=json.dumps(native_request)
+                system=[{"text": system_prompt}],
+                messages=[{"role": "user", "content": [{"text": user_content}]}],
+                inferenceConfig={"maxTokens": 1000, "temperature": 0.1}
             )
+            raw_text = response["output"]["message"]["content"][0]["text"].strip()
 
-            # 5. Parse response body
-            response_body = json.loads(response.get("body").read())
-            return response_body.get("content", [{}])[0].get("text", "No response generated.")
+            # Clean possible markdown wrap (```json ... ```)
+            if raw_text.startswith("```"):
+                raw_text = raw_text.split("```")[1]
+                if raw_text.startswith("json"):
+                    raw_text = raw_text[4:]
 
+            return json.loads(raw_text.strip())
         except Exception as e:
-            return f"Error communicating with AWS Bedrock: {str(e)}"
+            return {
+                "bias": "no_view",
+                "confidence": "low",
+                "drivers": [f"Error during LLM inference: {str(e)}"],
+                "risks": []
+            }
